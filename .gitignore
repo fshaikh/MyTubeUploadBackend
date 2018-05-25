@@ -1,0 +1,7 @@
+# Dependency directories
+.vscode/
+node_modules/
+dist/
+README.md.txt
+
+

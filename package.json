@@ -1,0 +1,22 @@
+{
+  "name": "mytube-serverless-uploads",
+  "version": "1.0.0",
+  "description": "AWS Lambda function for video uploads and transcoding pipeline",
+  "main": "index.js",
+  "scripts": {
+    "build": "npm run build-ts",
+    "build-ts": "tsc",
+    "package":"compress-archive -Path dist/*.js -DestinationPath dist/lambda-transcoder-package.zip",
+    "deploy":"npm run build && npm run package"
+  },
+  "author": "Furqan Shaikh",
+  "license": "ISC",
+  "dependencies": {
+    "aws-sdk": "^2.246.1"
+  },
+  "devDependencies": {
+    "@types/aws-sdk": "^2.7.0",
+    "@types/node": "^10.1.2",
+    "typescript": "^2.8.3"
+  }
+}
