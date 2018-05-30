@@ -1,0 +1,130 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description" : "Template for creating video upload and transcoding pipeline",
+    "Parameters" : {
+        "SourceS3BucketParam":{
+            "Description":"S3 bucket name where all source video files will be uploaded. Acts as the source trigger for Lambda",
+            "Type":"String"
+        },
+        "DestinationS3BucketParam":{
+            "Description":"S3 bucket name where all transcoded video files will be uploaded. AWS ElasticTranscoder will upload the transcoded files to this bucket",
+            "Type":"String"
+        },
+        "LambdaFunctionsS3BucketParam":{
+            "Description":"S3 bucket name where all AWS Lambda zip files will be uploaded",
+            "Type":"String"
+        },
+        "LambdaIAMRoleParam": {
+            "Description":"IAM Role name which will be associated to Upload AWS Lambda function",
+            "Type": "String"
+        },
+        "UploadLambdaZipFileNameParam": {
+            "Description":"File name of the upload lambda function containing the code",
+            "Type": "String"
+        },
+        "UploadLambdaFunctionNameParam": {
+            "Description":"Function name of the upload AWS lambda",
+            "Type": "String"
+        },
+        "ElasticTranscodeRegionParam": {
+            "Description":"AWS Region for Elastic Transcode Pipeline",
+            "Type": "String"
+        },
+        "ElasticTranscodePipelineIdParam": {
+            "Description":"Elastic Transcoder Pipeline Id",
+            "Type": "String"
+        }
+    },
+    "Resources": {
+        "SourceS3Bucket": {
+            "Type": "AWS::S3::Bucket",
+            "DependsOn": ["LambdaUpload", "LambdaInvokePermission"],
+            "Properties": {
+                "BucketName": {"Ref": "SourceS3BucketParam"},
+                "NotificationConfiguration": {
+                    "LambdaConfigurations": [
+                        {
+                            "Function": { "Fn::GetAtt" : [ "LambdaUpload", "Arn" ] },
+                            "Event": "s3:ObjectCreated:*"
+                        }
+                    ]
+                }
+            }
+        },
+        "DestinationS3Bucket": {
+            "Type": "AWS::S3::Bucket",
+            "Properties": {
+                "BucketName": {"Ref": "DestinationS3BucketParam"}
+            }
+        },
+        "AWSLambdaIAMRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "RoleName": {"Ref": "LambdaIAMRoleParam"},
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                      {
+                        "Effect": "Allow",
+                        "Principal": {
+                          "Service": "lambda.amazonaws.com"
+                        },
+                        "Action": "sts:AssumeRole"
+                      }
+                    ]
+                  },
+                "ManagedPolicyArns": 
+                [
+                    "arn:aws:iam::aws:policy/AmazonS3FullAccess",
+                    "arn:aws:iam::aws:policy/AmazonElasticTranscoderJobsSubmitter",
+                    "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
+                ]  
+            }
+        },
+        "LambdaUpload":{
+            "Type" : "AWS::Lambda::Function",
+            "DependsOn":["AWSLambdaIAMRole", "DestinationS3Bucket"],
+            "Properties" : {
+                "Code": {
+                    "S3Bucket": {"Ref": "LambdaFunctionsS3BucketParam"},
+                    "S3Key": {"Ref": "UploadLambdaZipFileNameParam"}
+                  },
+              "Description" : "AWS Lambda function which triggers when a video file is uploaded to a source S3 bucket and invokes the Elastic Transcoder job to transcode the source video file",
+              "FunctionName" : {"Ref": "UploadLambdaFunctionNameParam"},
+              "Handler" : "index.handler",
+              "Role" : {
+                        "Fn::GetAtt": [
+                            "AWSLambdaIAMRole",
+                            "Arn"
+                        ]
+                      },
+              "Runtime" : "nodejs8.10",
+              "Timeout" : "10",
+              "Environment":{
+                "Variables":{
+                    "ELASTIC_TRANSCODER_REGION": {"Ref": "ElasticTranscodeRegionParam"},
+                    "ELASTIC_TRANSCODER_PIPELINE_ID": {"Ref": "ElasticTranscodePipelineIdParam"}
+                }
+              }
+              
+            }
+          },
+        "LambdaInvokePermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "FunctionName": {
+                    "Fn::GetAtt": [
+                        "LambdaUpload",
+                        "Arn"
+                    ]
+                },
+                "Action": "lambda:InvokeFunction",
+                "Principal": "s3.amazonaws.com",
+                "SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                },
+                "SourceArn": { "Fn::Join": [ "", [ "arn:aws:s3:::", {"Ref": "SourceS3BucketParam"} ]]}
+            }
+        }
+    }
+}
